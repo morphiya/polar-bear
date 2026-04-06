@@ -127,7 +127,6 @@
   padding: 14px;
   width: 260px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-  animation: fadeIn 0.15s ease;
   z-index: 101;
 }
 
