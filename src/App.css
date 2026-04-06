@@ -1,0 +1,20 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 32px;
+  gap: 24px;
+}
+
+.app-header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  color: #c9b8ff;
+  letter-spacing: -0.5px;
+}
+
+.app-header p {
+  font-size: 14px;
+  color: #666680;
+  margin-top: 4px;
+}
