@@ -2,19 +2,42 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  padding: 32px;
-  gap: 24px;
+  padding: 24px 32px 32px;
+  gap: 20px;
 }
 
-.app-header h1 {
-  font-size: 24px;
-  font-weight: 600;
-  color: #c9b8ff;
-  letter-spacing: -0.5px;
+.app-nav {
+  display: flex;
+  gap: 4px;
 }
 
-.app-header p {
-  font-size: 14px;
+.app-nav-btn {
+  background: none;
+  border: none;
   color: #666680;
-  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.app-nav-btn:hover {
+  color: #c9b8ff;
+  background: #1e1e2a;
+}
+
+.app-nav-btn.active {
+  color: #c9b8ff;
+  background: #1e1e2a;
+}
+
+.app-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #3a3a50;
+  font-size: 16px;
 }

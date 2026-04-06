@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import * as d3 from "d3";
-import Database from "@tauri-apps/plugin-sql";
+import { getDb } from "./db";
 
 const MARGIN = { top: 40, right: 40, bottom: 75, left: 60 };
 const Y_TICKS = [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5];
@@ -36,14 +36,7 @@ export default function MoodGraph() {
   // Инициализация БД
   useEffect(() => {
     async function initDb() {
-      const db = await Database.load("sqlite:polar-bear.db");
-      await db.execute(`
-        CREATE TABLE IF NOT EXISTS entries (
-          date TEXT PRIMARY KEY,
-          mood INTEGER NOT NULL,
-          note TEXT DEFAULT ''
-        )
-      `);
+      const db = await getDb();
       dbRef.current = db;
       await loadMonth(db, currentMonth);
     }

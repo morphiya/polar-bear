@@ -1,0 +1,236 @@
+.calendar {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #15151e;
+  border-radius: 16px;
+  border: 1px solid #2a2a3a;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Навигация */
+.cal-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #1e1e2a;
+  flex-shrink: 0;
+}
+
+.cal-nav-btn {
+  background: none;
+  border: 1px solid #2a2a3a;
+  border-radius: 6px;
+  color: #666680;
+  font-size: 16px;
+  width: 26px;
+  height: 26px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cal-nav-btn:hover {
+  border-color: #c9b8ff44;
+  color: #c9b8ff;
+}
+
+.cal-today-btn {
+  background: none;
+  border: 1px solid #2a2a3a;
+  border-radius: 6px;
+  color: #666680;
+  font-size: 12px;
+  padding: 0 10px;
+  height: 26px;
+  cursor: pointer;
+}
+
+.cal-today-btn:hover {
+  border-color: #c9b8ff44;
+  color: #c9b8ff;
+}
+
+.cal-nav-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #9988cc;
+  margin-left: 6px;
+}
+
+/* Заголовки дней */
+.cal-header {
+  display: flex;
+  border-bottom: 1px solid #2a2a3a;
+  flex-shrink: 0;
+}
+
+.cal-day-header {
+  flex: 1;
+  padding: 8px 0;
+  display: flex;
+  justify-content: center;
+}
+
+.cal-day-header.weekend {
+  background: #13131c;
+}
+
+.cal-day-header-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.cal-day-name {
+  font-size: 11px;
+  font-weight: 500;
+  color: #555570;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.cal-day-num {
+  font-size: 18px;
+  font-weight: 600;
+  color: #666680;
+  line-height: 1;
+}
+
+.cal-day-header-inner.today .cal-day-name {
+  color: #c9b8ff;
+}
+
+.cal-day-header-inner.today .cal-day-num {
+  color: #c9b8ff;
+}
+
+/* Тело */
+.cal-body {
+  flex: 1;
+  display: flex;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a3a transparent;
+}
+
+/* Временная ось */
+.cal-gutter {
+  flex-shrink: 0;
+  border-right: 1px solid #2a2a3a;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.cal-time-label {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding-right: 8px;
+  font-size: 10px;
+  color: #3a3a50;
+  box-sizing: border-box;
+  transform: translateY(-6px); /* выравниваем по линии */
+}
+
+/* Колонки дней */
+.cal-days {
+  flex: 1;
+  display: flex;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  position: relative;
+}
+
+.cal-day {
+  flex: 1;
+  display: flex;
+  border-right: 1px solid #2e2e42;
+}
+
+.cal-day:last-child {
+  border-right: none;
+}
+
+.cal-day.today .cal-event-col {
+  background: #c9b8ff05;
+}
+
+.cal-day.weekend .cal-timeblock-col,
+.cal-day.weekend .cal-event-col {
+  background: #13131c;
+}
+
+/* Линия текущего времени */
+.cal-now-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #c9b8ff88;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.cal-now-line::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #c9b8ff;
+}
+
+.cal-now-label {
+  position: absolute;
+  left: 10px;
+  top: -8px;
+  font-size: 10px;
+  color: #c9b8ff;
+  background: #15151e;
+  padding: 0 3px;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+/* Ховер слотов */
+.cal-timeblock-col .cal-slot:hover {
+  background: #1e1e2a;
+  cursor: pointer;
+}
+
+.cal-event-col .cal-slot:hover {
+  background: #1a1a28;
+  cursor: pointer;
+}
+
+/* Колонка таймблоков */
+.cal-timeblock-col {
+  flex-shrink: 0;
+  border-right: 1px solid #1e1e2a;
+  position: relative;
+}
+
+/* Колонка событий */
+.cal-event-col {
+  flex: 1;
+  position: relative;
+}
+
+/* Слоты */
+.cal-slot {
+  box-sizing: border-box;
+  border-bottom: 1px solid #1a1a24;
+}
+
+.cal-slot-hour {
+  border-bottom-color: #2a2a3a;
+}
