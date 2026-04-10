@@ -230,10 +230,31 @@
   justify-content: flex-start;
 }
 
+.cal-timeblock.continues-from {
+  border-top: 2px dashed;
+  border-radius: 0 0 4px 4px;
+}
+
+.cal-timeblock.continues-to {
+  border-bottom: 2px dashed;
+  border-radius: 4px 4px 0 0;
+}
+
+.cal-timeblock.continues-from.continues-to {
+  border-radius: 0;
+}
+
 .cal-timeblock.dragging {
   opacity: 0.75;
   cursor: grabbing;
   z-index: 20;
+}
+
+.cal-timeblock-repeat {
+  display: block;
+  font-size: 9px;
+  opacity: 0.6;
+  margin-top: 2px;
 }
 
 .cal-timeblock-label {
@@ -313,7 +334,8 @@
   margin-top: 8px;
 }
 
-.tb-modal-times label {
+.tb-modal-times label,
+.tb-modal-times .tb-picker-field {
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -347,6 +369,183 @@
 .tb-color-btn.selected {
   border-color: #ffffff88;
   transform: scale(1.15);
+}
+
+/* Recurrence в форме */
+.tb-recurrence {
+  margin-top: 10px;
+  border-top: 1px solid #1e1e2a;
+  padding-top: 10px;
+}
+
+.tb-recurrence-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #9988cc;
+  user-select: none;
+}
+
+.tb-recurrence-toggle input[type="checkbox"] {
+  accent-color: #c9b8ff;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.tb-recurrence-fields {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tb-recurrence-row {
+  display: flex;
+  gap: 4px;
+}
+
+.tb-freq-btn, .tb-endtype-btn {
+  flex: 1;
+  background: #0f0f18;
+  border: 1px solid #2a2a3a;
+  border-radius: 6px;
+  color: #555570;
+  font-size: 11px;
+  padding: 4px 0;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.1s;
+}
+
+.tb-freq-btn.active, .tb-endtype-btn.active {
+  border-color: #c9b8ff55;
+  color: #c9b8ff;
+  background: #c9b8ff12;
+}
+
+.tb-count-input {
+  padding: 4px 8px;
+  font-size: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Scope modal */
+.scope-modal {
+  width: 280px;
+  position: fixed;
+  animation: tbDetailIn 0.12s ease;
+}
+
+.scope-modal-title {
+  font-size: 12px;
+  color: #555570;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.scope-modal-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.scope-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  background: none;
+  border: 1px solid #2a2a3a;
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: border-color 0.1s, background 0.1s;
+  font-family: inherit;
+}
+
+.scope-btn:hover {
+  border-color: #c9b8ff44;
+  background: #c9b8ff08;
+}
+
+.scope-btn-label {
+  font-size: 13px;
+  color: #e8e8f0;
+  font-weight: 500;
+}
+
+.scope-btn-desc {
+  font-size: 10px;
+  color: #444460;
+}
+
+.scope-cancel {
+  width: 100%;
+  text-align: center;
+  border-radius: 6px;
+  padding: 6px;
+}
+
+/* Модалка выбора блока */
+.block-picker-modal {
+  width: 220px;
+  position: fixed;
+  animation: tbDetailIn 0.12s ease;
+  padding: 10px;
+}
+
+.block-picker-title {
+  font-size: 10px;
+  color: #444460;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.block-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 6px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.block-picker-item:hover {
+  background: #1e1e2e;
+}
+
+.block-picker-color {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.block-picker-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.block-picker-name {
+  font-size: 13px;
+  color: #e8e8f0;
+  font-weight: 500;
+}
+
+.block-picker-time {
+  font-size: 10px;
+  color: #555570;
 }
 
 /* Детальная модалка таймблока */

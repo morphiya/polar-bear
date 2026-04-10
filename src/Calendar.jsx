@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from "react";
-import { getTimeblocks, createTimeblock, updateTimeblock, deleteTimeblock } from "./db";
+import { getTimeblocks, createTimeblock, updateTimeblock, deleteTimeblock, createRecurringTimeblock, deleteTimeblockScoped, updateTimeblockScoped } from "./db";
 import { TimePicker, DatePicker } from "./Pickers";
 import "./Calendar.css";
 
@@ -44,6 +44,11 @@ function minToLabel(min) {
   return `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 }
 
+function fmtShortDate(str) {
+  const [y, m, d] = str.split("-");
+  return `${d}.${m}.${y}`;
+}
+
 function getNowMinutes() {
   const now = new Date();
   return now.getHours() * 60 + now.getMinutes();
@@ -58,6 +63,7 @@ export default function Calendar({ weekStart, onPrev, onNext, onToday }) {
   const [dragState, setDragState] = useState(null);
   const [resizeState, setResizeState] = useState(null);
   const [selectedBlock, setSelectedBlock] = useState(null); // { ...block, clickX, clickY }
+  const [blockPicker, setBlockPicker] = useState(null); // { blocks, clickX, clickY }
   const dragConfirmed = useRef(false);
 
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -102,19 +108,31 @@ export default function Calendar({ weekStart, onPrev, onNext, onToday }) {
           const duration = dragState.origEndMin - dragState.origStartMin;
           const newStart = Math.max(0, Math.min(24 * 60 - duration, dragState.origStartMin + deltaMin));
 
-          // Определяем день под курсором
+          // Определяем день под курсором и сдвигаем end_date на ту же разницу
           const el = document.elementFromPoint(e.clientX, e.clientY);
           const dayEl = el?.closest("[data-date]");
-          const currentDate = dayEl?.dataset.date ?? dragState.origDate;
+          const currentDate = dayEl?.dataset.date ?? dragState.currentDate;
 
-          setDragState((s) => ({ ...s, currentStartMin: newStart, currentEndMin: newStart + duration, currentDate }));
+          // Сдвигаем end_date на разницу дней
+          const origDateObj = new Date(dragState.origDate);
+          const newDateObj = new Date(currentDate);
+          const dayDelta = Math.round((newDateObj - origDateObj) / 86400000);
+          const origEndDateObj = new Date(dragState.origEndDate);
+          origEndDateObj.setDate(origEndDateObj.getDate() + dayDelta);
+          const currentEndDate = localDateStr(origEndDateObj);
+
+          setDragState((s) => ({ ...s, currentStartMin: newStart, currentEndMin: newStart + duration, currentDate, currentEndDate }));
         }
       }
       if (resizeState) {
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        const dayEl = el?.closest("[data-date]");
+        const currentEndDate = dayEl?.dataset.date ?? resizeState.currentEndDate;
+
         const deltaY = e.clientY - resizeState.startY;
         const deltaMin = Math.round(deltaY / SLOT_HEIGHT) * 30;
-        const newEnd = Math.min(24 * 60, Math.max(resizeState.origStartMin + 30, resizeState.origEndMin + deltaMin));
-        setResizeState((s) => ({ ...s, currentEndMin: newEnd }));
+        const newEnd = Math.min(24 * 60, Math.max(30, resizeState.origEndMin + deltaMin));
+        setResizeState((s) => ({ ...s, currentEndMin: newEnd, currentEndDate }));
       }
     };
 
@@ -124,6 +142,7 @@ export default function Calendar({ weekStart, onPrev, onNext, onToday }) {
           const block = timeblocks.find((b) => b.id === dragState.id);
           await updateTimeblock(dragState.id, {
             date: dragState.currentDate ?? block.date,
+            end_date: dragState.currentEndDate ?? block.end_date ?? block.date,
             start_min: dragState.currentStartMin,
             end_min: dragState.currentEndMin,
             type: block.type,
@@ -131,9 +150,23 @@ export default function Calendar({ weekStart, onPrev, onNext, onToday }) {
           });
           await loadTimeblocks();
         } else {
-          // Это клик — открываем модалку
+          // Это клик — ищем все перекрывающиеся блоки
           const block = timeblocks.find((b) => b.id === dragState.id);
-          setSelectedBlock({ ...block, clickX: dragState.clickX, clickY: dragState.clickY });
+          const overlapping = timeblocks.filter((b) => {
+            if (b.id === block.id) return true;
+            const bDate = b.date;
+            const bEndDate = b.end_date ?? b.date;
+            // Блок пересекает дату кликнутого блока
+            if (bDate > block.date || bEndDate < block.date) return false;
+            // Временное пересечение
+            return b.start_min < block.end_min && b.end_min > block.start_min;
+          });
+
+          if (overlapping.length > 1) {
+            setBlockPicker({ blocks: overlapping, clickX: dragState.clickX, clickY: dragState.clickY });
+          } else {
+            setSelectedBlock({ ...block, clickX: dragState.clickX, clickY: dragState.clickY });
+          }
         }
         dragConfirmed.current = false;
         document.body.style.userSelect = "";
@@ -143,6 +176,7 @@ export default function Calendar({ weekStart, onPrev, onNext, onToday }) {
         const block = timeblocks.find((b) => b.id === resizeState.id);
         await updateTimeblock(resizeState.id, {
           date: block.date,
+          end_date: resizeState.currentEndDate,
           start_min: block.start_min,
           end_min: resizeState.currentEndMin,
           type: block.type,
@@ -161,35 +195,67 @@ export default function Calendar({ weekStart, onPrev, onNext, onToday }) {
     };
   }, [dragState, resizeState, timeblocks]);
 
-  const handleSlotClick = (dateStr, slotIndex) => {
+  const handleSlotClick = (dateStr, slotIndex, e) => {
     const startMin = slotIndex * 30;
     const hasBlock = timeblocks.some(
       (b) => b.date === dateStr && b.start_min < startMin + 30 && b.end_min > startMin
     );
     if (hasBlock) return;
-    setCreatingBlock({ dateStr, startMin, endMin: startMin + 60 });
+    setCreatingBlock({ dateStr, startMin, endMin: startMin + 60, clickX: e.clientX, clickY: e.clientY });
   };
 
-  const handleCreate = async ({ type, color, startMin, endMin, dateStr }) => {
-    await createTimeblock({ date: dateStr, type, start_min: startMin, end_min: endMin, color });
+  const handleCreate = async ({ type, color, startMin, endMin, dateStr, endDateStr, recurrence }) => {
+    if (recurrence) {
+      await createRecurringTimeblock({
+        date: dateStr, end_date: endDateStr ?? dateStr,
+        type, start_min: startMin, end_min: endMin, color,
+        freq: recurrence.freq,
+        until_date: recurrence.endType === "until" ? recurrence.until : null,
+        count: recurrence.endType === "count" ? recurrence.count : null,
+      });
+    } else {
+      await createTimeblock({ date: dateStr, type, start_min: startMin, end_min: endMin, color, end_date: endDateStr ?? dateStr });
+    }
     setCreatingBlock(null);
     await loadTimeblocks();
   };
 
-  const handleDeleteBlock = async (id) => {
-    await deleteTimeblock(id);
+  const [scopeModal, setScopeModal] = useState(null); // { action: "delete"|"edit", block, updates? }
+
+  const handleDeleteBlock = (block) => {
+    if (block.recurrence_id != null && block.recurrence_id !== 0) {
+      const { clickX, clickY } = block;
+      setSelectedBlock(null);
+      setScopeModal({ action: "delete", block, clickX, clickY });
+    } else {
+      deleteTimeblock(block.id).then(() => { setSelectedBlock(null); loadTimeblocks(); });
+    }
+  };
+
+  const handleEditBlock = (block, updates) => {
+    if (block.recurrence_id != null && block.recurrence_id !== 0) {
+      const { clickX, clickY } = block;
+      setSelectedBlock(null);
+      setScopeModal({ action: "edit", block, updates, clickX, clickY });
+    } else {
+      updateTimeblock(block.id, updates).then(() => { setSelectedBlock(null); loadTimeblocks(); });
+    }
+  };
+
+  const handleScopeConfirm = async (scope) => {
+    const { action, block, updates } = scopeModal;
+    if (action === "delete") {
+      await deleteTimeblockScoped(block, scope);
+    } else {
+      await updateTimeblockScoped(block, updates, scope);
+    }
+    setScopeModal(null);
     setSelectedBlock(null);
     await loadTimeblocks();
   };
 
-  const handleEditBlock = async (id, updates) => {
-    await updateTimeblock(id, updates);
-    setSelectedBlock(null);
-    await loadTimeblocks();
-  };
-
-  const handleCopyBlock = async ({ type, color, dateStr, startMin, endMin }) => {
-    await createTimeblock({ date: dateStr, type, start_min: startMin, end_min: endMin, color });
+  const handleCopyBlock = async ({ type, color, dateStr, endDateStr, startMin, endMin }) => {
+    await createTimeblock({ date: dateStr, type, start_min: startMin, end_min: endMin, color, end_date: endDateStr ?? dateStr });
     setSelectedBlock(null);
     await loadTimeblocks();
   };
@@ -237,10 +303,11 @@ export default function Calendar({ weekStart, onPrev, onNext, onToday }) {
             const dateStr = localDateStr(day);
             const isToday = dateStr === today;
             const isWeekend = day.getDay() === 0 || day.getDay() === 6;
-            // Блоки этого дня + драгаемый блок если он сейчас над этим днём
+            // Блоки которые пересекают этот день
             const dayBlocks = timeblocks.filter((b) => {
-              if (dragState?.id === b.id) return dragState.currentDate === dateStr;
-              return b.date === dateStr;
+              const bDate = dragState?.id === b.id ? dragState.currentDate : b.date;
+              const bEndDate = dragState?.id === b.id ? dragState.currentEndDate : (b.end_date ?? b.date);
+              return bDate <= dateStr && bEndDate >= dateStr;
             });
 
             return (
@@ -261,7 +328,7 @@ export default function Calendar({ weekStart, onPrev, onNext, onToday }) {
                       key={i}
                       className={`cal-slot${i % 2 === 1 ? " cal-slot-hour" : ""}`}
                       style={{ height: SLOT_HEIGHT }}
-                      onClick={() => handleSlotClick(dateStr, i)}
+                      onClick={(e) => handleSlotClick(dateStr, i, e)}
                     />
                   ))}
 
@@ -269,20 +336,29 @@ export default function Calendar({ weekStart, onPrev, onNext, onToday }) {
                   {dayBlocks.map((block) => {
                     const isDragging = dragState?.id === block.id;
                     const isResizing = resizeState?.id === block.id;
+
+                    const bDate = isDragging ? dragState.currentDate : block.date;
+                    const bEndDate = isResizing ? resizeState.currentEndDate
+                      : isDragging ? dragState.currentEndDate : (block.end_date ?? block.date);
                     const startMin = isDragging ? dragState.currentStartMin : block.start_min;
-                    const endMin = isResizing
-                      ? resizeState.currentEndMin
-                      : isDragging
-                      ? dragState.currentEndMin
-                      : block.end_min;
+                    const endMin = isResizing ? resizeState.currentEndMin
+                      : isDragging ? dragState.currentEndMin : block.end_min;
+
+                    const isStart = bDate === dateStr;
+                    const isEnd = bEndDate === dateStr;
+                    const isSingle = isStart && isEnd;
+
+                    const top = isStart ? (startMin / 30) * SLOT_HEIGHT : 0;
+                    const bottom = isEnd ? ((24 * 60 - endMin) / 30) * SLOT_HEIGHT : 0;
+                    const height = SLOTS * SLOT_HEIGHT - top - bottom;
 
                     return (
                       <div
                         key={block.id}
-                        className={`cal-timeblock${isDragging ? " dragging" : ""}`}
+                        className={`cal-timeblock${isDragging ? " dragging" : ""}${!isStart ? " continues-from" : ""}${!isEnd ? " continues-to" : ""}`}
                         style={{
-                          top: (startMin / 30) * SLOT_HEIGHT,
-                          height: ((endMin - startMin) / 30) * SLOT_HEIGHT,
+                          top,
+                          height,
                           background: block.color + "28",
                           borderColor: block.color,
                         }}
@@ -293,6 +369,7 @@ export default function Calendar({ weekStart, onPrev, onNext, onToday }) {
                           setDragState({
                             id: block.id,
                             origDate: block.date,
+                            origEndDate: block.end_date ?? block.date,
                             origStartMin: block.start_min,
                             origEndMin: block.end_min,
                             startX: e.clientX,
@@ -300,6 +377,7 @@ export default function Calendar({ weekStart, onPrev, onNext, onToday }) {
                             clickX: e.clientX,
                             clickY: e.clientY,
                             currentDate: block.date,
+                            currentEndDate: block.end_date ?? block.date,
                             currentStartMin: block.start_min,
                             currentEndMin: block.end_min,
                           });
@@ -307,6 +385,7 @@ export default function Calendar({ weekStart, onPrev, onNext, onToday }) {
                       >
                         <span className="cal-timeblock-label" style={{ color: block.color }}>
                           {block.type}
+                          {block.recurrence_id != null && block.recurrence_id !== 0 && <span className="cal-timeblock-repeat">↻</span>}
                         </span>
                         <div
                           className="cal-timeblock-resize"
@@ -316,8 +395,10 @@ export default function Calendar({ weekStart, onPrev, onNext, onToday }) {
                               id: block.id,
                               origStartMin: block.start_min,
                               origEndMin: block.end_min,
+                              origEndDate: block.end_date ?? block.date,
                               startY: e.clientY,
                               currentEndMin: block.end_min,
+                              currentEndDate: block.end_date ?? block.date,
                             });
                           }}
                         />
@@ -355,10 +436,33 @@ export default function Calendar({ weekStart, onPrev, onNext, onToday }) {
           block={selectedBlock}
           clickX={selectedBlock.clickX}
           clickY={selectedBlock.clickY}
-          onDelete={() => handleDeleteBlock(selectedBlock.id)}
-          onEdit={(updates) => handleEditBlock(selectedBlock.id, updates)}
+          onDelete={() => handleDeleteBlock(selectedBlock)}
+          onEdit={(updates) => handleEditBlock(selectedBlock, updates)}
           onCopy={handleCopyBlock}
           onClose={() => setSelectedBlock(null)}
+        />
+      )}
+
+      {scopeModal && (
+        <ScopeModal
+          action={scopeModal.action}
+          clickX={scopeModal.clickX}
+          clickY={scopeModal.clickY}
+          onConfirm={handleScopeConfirm}
+          onClose={() => setScopeModal(null)}
+        />
+      )}
+
+      {blockPicker && (
+        <BlockPickerModal
+          blocks={blockPicker.blocks}
+          clickX={blockPicker.clickX}
+          clickY={blockPicker.clickY}
+          onSelect={(block) => {
+            setBlockPicker(null);
+            setSelectedBlock({ ...block, clickX: blockPicker.clickX, clickY: blockPicker.clickY });
+          }}
+          onClose={() => setBlockPicker(null)}
         />
       )}
     </div>
@@ -366,7 +470,6 @@ export default function Calendar({ weekStart, onPrev, onNext, onToday }) {
 }
 
 const DETAIL_W = 260;
-const DETAIL_H = 160;
 
 function TimeblockDetailModal({ block, clickX, clickY, onDelete, onEdit, onCopy, onClose }) {
   const [mode, setMode] = useState("view"); // "view" | "edit" | "copy"
@@ -375,24 +478,34 @@ function TimeblockDetailModal({ block, clickX, clickY, onDelete, onEdit, onCopy,
   const [start, setStart] = useState(block.start_min);
   const [end, setEnd] = useState(block.end_min);
 
-  const duration = block.end_min - block.start_min;
-  const hours = Math.floor(duration / 60);
-  const mins = duration % 60;
+  const DAY_NAMES_FULL = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+
+  function fmtDate(str) {
+    const [y, mo, d] = str.split("-").map(Number);
+    const dow = new Date(y, mo - 1, d).getDay();
+    return `${String(d).padStart(2,"0")}.${String(mo).padStart(2,"0")}.${y}, ${DAY_NAMES_FULL[dow]}`;
+  }
+
+  const endDate = block.end_date ?? block.date;
+  const multiDay = endDate !== block.date;
+
+  // Длительность в минутах с учётом дней
+  const startDateObj = new Date(block.date);
+  const endDateObj = new Date(endDate);
+  const daysDiff = Math.round((endDateObj - startDateObj) / 86400000);
+  const totalMin = daysDiff * 24 * 60 + block.end_min - block.start_min;
+  const hours = Math.floor(totalMin / 60);
+  const mins = totalMin % 60;
   const durationLabel = hours > 0
     ? `${hours}h${mins > 0 ? ` ${mins}m` : ""}`
     : `${mins}m`;
-
-  const [y, mo, d] = block.date.split("-").map(Number);
-  const dateObj = new Date(y, mo - 1, d);
-  const DAY_NAMES_FULL = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-  const dateFormatted = `${String(d).padStart(2,"0")}.${String(mo).padStart(2,"0")}.${y}, ${DAY_NAMES_FULL[dateObj.getDay()]}`;
 
   const handleKeyDown = (e) => {
     if (e.key === "Escape") onClose();
   };
 
   const posX = Math.max(12, Math.min(clickX + 12, window.innerWidth - DETAIL_W - 12));
-  const posY = Math.max(12, Math.min(clickY + 12, window.innerHeight - DETAIL_H - 12));
+  const posY = Math.max(12, Math.min(clickY + 12, window.innerHeight - TB_MODAL_H - 12));
 
   return (
     <div className="note-modal-overlay" onClick={onClose}>
@@ -404,7 +517,14 @@ function TimeblockDetailModal({ block, clickX, clickY, onDelete, onEdit, onCopy,
               <div className="tb-detail-name">{block.type}</div>
             </div>
             <div className="tb-detail-info">
-              <div className="tb-detail-row">{dateFormatted}</div>
+              {multiDay ? (
+                <>
+                  <div className="tb-detail-row">{fmtDate(block.date)} – </div>
+                  <div className="tb-detail-row">{fmtDate(endDate)}</div>
+                </>
+              ) : (
+                <div className="tb-detail-row">{fmtDate(block.date)}</div>
+              )}
               <div className="tb-detail-row">{minToLabel(block.start_min)} – {minToLabel(block.end_min)}</div>
               <div className="tb-detail-row muted">{durationLabel}</div>
             </div>
@@ -419,14 +539,15 @@ function TimeblockDetailModal({ block, clickX, clickY, onDelete, onEdit, onCopy,
           <TimeblockForm
             key="edit"
             date={block.date}
+            endDate={block.end_date ?? block.date}
             startMin={start}
             endMin={end}
             type={type}
             color={color}
             submitLabel="Save"
-            onSave={({ type: t, color: c, dateStr, startMin, endMin }) => {
+            onSave={({ type: t, color: c, dateStr, endDateStr, startMin, endMin }) => {
               setType(t); setColor(c); setStart(startMin); setEnd(endMin);
-              onEdit({ date: dateStr, start_min: startMin, end_min: endMin, type: t, color: c });
+              onEdit({ date: dateStr, end_date: endDateStr, start_min: startMin, end_min: endMin, type: t, color: c });
             }}
             onClose={() => setMode("view")}
           />
@@ -435,6 +556,7 @@ function TimeblockDetailModal({ block, clickX, clickY, onDelete, onEdit, onCopy,
           <TimeblockForm
             key="copy"
             date={block.date}
+            endDate={block.end_date ?? block.date}
             startMin={block.start_min}
             endMin={block.end_min}
             type={block.type}
@@ -457,25 +579,43 @@ function parseTimeInput(val) {
   return h * 60 + m;
 }
 
-function TimeblockForm({ title, date, startMin, endMin, type: initType, color: initColor, submitLabel, onSave, onClose, autoFocusName = true }) {
+function TimeblockForm({ title, date, endDate, startMin, endMin, type: initType, color: initColor, submitLabel, onSave, onClose, showRecurrence = false, autoFocusName = true }) {
   const [type, setType] = useState(initType ?? "");
   const [color, setColor] = useState(initColor ?? DEFAULT_COLOR);
   const [date_, setDate] = useState(date);
+  const [endDate_, setEndDate] = useState(endDate ?? date);
   const [startText, setStartText] = useState(minToLabel(startMin));
   const [endText, setEndText] = useState(minToLabel(endMin));
+  const [repeat, setRepeat] = useState(false);
+  const [freq, setFreq] = useState("daily");
+  const [endType, setEndType] = useState("until");
+  const [until, setUntil] = useState(() => {
+    const d = new Date(date);
+    d.setMonth(d.getMonth() + 1);
+    return localDateStr(d);
+  });
+  const [count, setCount] = useState(10);
   const inputRef = useRef(null);
 
   useEffect(() => { if (autoFocusName) inputRef.current?.focus(); }, []);
 
   const startMin_ = parseTimeInput(startText) ?? startMin;
   const endMin_ = parseTimeInput(endText) ?? endMin;
-  const valid = type.trim() && endMin_ > startMin_ && date_;
+  const multiDay = endDate_ !== date_;
+  const valid = type.trim() && date_ && endDate_ >= date_ && (multiDay || endMin_ > startMin_);
+
+  const handleSave = () => {
+    onSave({
+      type: type.trim(), color,
+      dateStr: date_, endDateStr: endDate_,
+      startMin: startMin_, endMin: endMin_,
+      recurrence: repeat ? { freq, endType, until, count: Number(count) } : null,
+    });
+  };
 
   const handleKeyDown = (e) => {
     if (e.key === "Escape") onClose();
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && valid) {
-      onSave({ type: type.trim(), color, dateStr: date_, startMin: startMin_, endMin: endMin_ });
-    }
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && valid) handleSave();
   };
 
   return (
@@ -490,20 +630,26 @@ function TimeblockForm({ title, date, startMin, endMin, type: initType, color: i
         onChange={(e) => setType(e.target.value)}
       />
 
-      <div className="tb-modal-field">
-        <span className="tb-modal-field-label">Date</span>
-        <DatePicker value={date_} onChange={setDate} />
+      <div className="tb-modal-times">
+        <div className="tb-picker-field">
+          <span>Start date</span>
+          <DatePicker value={date_} onChange={(v) => { setDate(v); if (v > endDate_) setEndDate(v); }} />
+        </div>
+        <div className="tb-picker-field">
+          <span>End date</span>
+          <DatePicker value={endDate_} onChange={(v) => { if (v >= date_) setEndDate(v); }} />
+        </div>
       </div>
 
       <div className="tb-modal-times">
-        <label>
-          <span>Start</span>
+        <div className="tb-picker-field">
+          <span>Start time</span>
           <TimePicker value={startText} onChange={setStartText} />
-        </label>
-        <label>
-          <span>End</span>
+        </div>
+        <div className="tb-picker-field">
+          <span>End time</span>
           <TimePicker value={endText} onChange={setEndText} />
-        </label>
+        </div>
       </div>
 
       <div className="tb-modal-colors">
@@ -517,13 +663,52 @@ function TimeblockForm({ title, date, startMin, endMin, type: initType, color: i
         ))}
       </div>
 
+      {showRecurrence && (
+        <div className="tb-recurrence">
+          <label className="tb-recurrence-toggle">
+            <input type="checkbox" checked={repeat} onChange={(e) => setRepeat(e.target.checked)} />
+            <span>Repeat</span>
+          </label>
+
+          {repeat && (
+            <div className="tb-recurrence-fields">
+              <div className="tb-recurrence-row">
+                {["daily","weekly","monthly"].map((f) => (
+                  <button
+                    key={f}
+                    className={`tb-freq-btn${freq === f ? " active" : ""}`}
+                    onClick={() => setFreq(f)}
+                  >
+                    {f.charAt(0).toUpperCase() + f.slice(1)}
+                  </button>
+                ))}
+              </div>
+
+              <div className="tb-recurrence-row">
+                <button className={`tb-endtype-btn${endType === "until" ? " active" : ""}`} onClick={() => setEndType("until")}>Until</button>
+                <button className={`tb-endtype-btn${endType === "count" ? " active" : ""}`} onClick={() => setEndType("count")}>Times</button>
+              </div>
+
+              {endType === "until" && (
+                <DatePicker value={until} onChange={setUntil} />
+              )}
+              {endType === "count" && (
+                <input
+                  type="number"
+                  className="note-modal-input tb-count-input"
+                  min={2} max={365}
+                  value={count}
+                  onChange={(e) => setCount(e.target.value)}
+                />
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="note-modal-actions">
         <button className="note-modal-cancel" onClick={onClose}>Cancel</button>
-        <button
-          className="note-modal-save"
-          disabled={!valid}
-          onClick={() => onSave({ type: type.trim(), color, dateStr: date_, startMin: startMin_, endMin: endMin_ })}
-        >
+        <button className="note-modal-save" disabled={!valid} onClick={handleSave}>
           {submitLabel}
         </button>
       </div>
@@ -531,19 +716,93 @@ function TimeblockForm({ title, date, startMin, endMin, type: initType, color: i
   );
 }
 
-function TimeblockModal({ dateStr, startMin, endMin, onSave, onClose }) {
+const TB_MODAL_W = 260;
+const TB_MODAL_H = 380;
+
+function TimeblockModal({ dateStr, startMin, endMin, clickX, clickY, onSave, onClose }) {
+  const posX = Math.max(12, Math.min((clickX ?? window.innerWidth / 2) + 12, window.innerWidth - TB_MODAL_W - 12));
+  const posY = Math.max(12, Math.min((clickY ?? window.innerHeight / 2) + 12, window.innerHeight - TB_MODAL_H - 12));
   return (
     <div className="note-modal-overlay" onClick={onClose}>
-      <div className="note-modal tb-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="note-modal tb-modal" style={{ left: posX, top: posY, transform: "none" }} onClick={(e) => e.stopPropagation()}>
         <TimeblockForm
           title="New block"
           date={dateStr}
           startMin={startMin}
           endMin={endMin}
           submitLabel="Add"
+          showRecurrence
           onSave={onSave}
           onClose={onClose}
         />
+      </div>
+    </div>
+  );
+}
+
+const SCOPE_W = 280;
+const SCOPE_H = 200;
+
+function ScopeModal({ action, clickX, clickY, onConfirm, onClose }) {
+  const verb = action === "delete" ? "Delete" : "Edit";
+  const posX = Math.max(12, Math.min((clickX ?? window.innerWidth / 2) + 12, window.innerWidth - SCOPE_W - 12));
+  const posY = Math.max(12, Math.min((clickY ?? window.innerHeight / 2) + 12, window.innerHeight - SCOPE_H - 12));
+  return (
+    <div className="note-modal-overlay" onClick={onClose}>
+      <div className="note-modal scope-modal" style={{ left: posX, top: posY, transform: "none" }} onClick={(e) => e.stopPropagation()}>
+        <div className="scope-modal-title">{verb} recurring block</div>
+        <div className="scope-modal-options">
+          <button className="scope-btn" onClick={() => onConfirm("this")}>
+            <span className="scope-btn-label">This event</span>
+            <span className="scope-btn-desc">Only this occurrence</span>
+          </button>
+          <button className="scope-btn" onClick={() => onConfirm("following")}>
+            <span className="scope-btn-label">This and following</span>
+            <span className="scope-btn-desc">This and all future occurrences</span>
+          </button>
+          <button className="scope-btn" onClick={() => onConfirm("all")}>
+            <span className="scope-btn-label">All events</span>
+            <span className="scope-btn-desc">Every occurrence in the series</span>
+          </button>
+        </div>
+        <button className="note-modal-cancel scope-cancel" onClick={onClose}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+const PICKER_W = 220;
+const PICKER_H = 40; // минимум, растёт с числом блоков
+
+function BlockPickerModal({ blocks, clickX, clickY, onSelect, onClose }) {
+  const posX = Math.max(12, Math.min(clickX + 12, window.innerWidth - PICKER_W - 12));
+  const posY = Math.max(12, Math.min(clickY + 12, window.innerHeight - (blocks.length * 44 + 20) - 12));
+
+  return (
+    <div className="note-modal-overlay" onClick={onClose}>
+      <div
+        className="note-modal block-picker-modal"
+        style={{ left: posX, top: posY }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="block-picker-title">Select block</div>
+        {blocks.map((block) => (
+          <div
+            key={block.id}
+            className="block-picker-item"
+            onClick={() => onSelect(block)}
+          >
+            <div className="block-picker-color" style={{ background: block.color }} />
+            <div className="block-picker-info">
+              <span className="block-picker-name">{block.type}</span>
+              <span className="block-picker-time">
+                {block.end_date && block.end_date !== block.date
+                  ? `${fmtShortDate(block.date)} ${minToLabel(block.start_min)} – ${fmtShortDate(block.end_date)} ${minToLabel(block.end_min)}`
+                  : `${minToLabel(block.start_min)}–${minToLabel(block.end_min)}`}
+              </span>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

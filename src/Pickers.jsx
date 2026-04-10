@@ -1,6 +1,31 @@
 import { useState, useRef, useEffect } from "react";
 import "./Pickers.css";
 
+const TIME_W = 120;
+const TIME_H = 200;
+const DATE_W = 230;
+const DATE_H = 260;
+
+function useDropdownPos(ref, open, dropW, dropH) {
+  const [pos, setPos] = useState({ top: null, bottom: null, left: 0 });
+
+  useEffect(() => {
+    if (!open || !ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceRight = window.innerWidth - rect.left;
+
+    const left = spaceRight >= dropW ? 0 : rect.width - dropW;
+    if (spaceBelow >= dropH) {
+      setPos({ top: rect.height + 4, bottom: null, left });
+    } else {
+      setPos({ top: null, bottom: rect.height + 4, left });
+    }
+  }, [open]);
+
+  return pos;
+}
+
 // ─── TimePicker ────────────────────────────────────────────────────────────
 
 export function TimePicker({ value, onChange }) {
@@ -10,6 +35,7 @@ export function TimePicker({ value, onChange }) {
   const minRef = useRef(null);
 
   const [h, m] = value.split(":").map(Number);
+  const pos = useDropdownPos(ref, open, TIME_W, TIME_H);
 
   useEffect(() => {
     if (!open) return;
@@ -20,7 +46,6 @@ export function TimePicker({ value, onChange }) {
 
   useEffect(() => {
     if (!open) return;
-    // Scroll selected item into view
     hourRef.current?.querySelector(".selected")?.scrollIntoView({ block: "center" });
     minRef.current?.querySelector(".selected")?.scrollIntoView({ block: "center" });
   }, [open]);
@@ -35,7 +60,11 @@ export function TimePicker({ value, onChange }) {
         {value}
       </button>
       {open && (
-        <div className="picker-dropdown time-dropdown">
+        <div
+          className="picker-dropdown time-dropdown"
+          style={{ top: pos.top ?? "auto", bottom: pos.bottom ?? "auto", left: pos.left }}
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="time-col" ref={hourRef}>
             {Array.from({ length: 24 }, (_, i) => (
               <div
@@ -85,7 +114,6 @@ function getDaysInMonth(y, m) {
 }
 
 function getWeekDayOf1st(y, m) {
-  // 0=Sun…6=Sat → convert to Mon-based (0=Mon…6=Sun)
   const day = new Date(y, m - 1, 1).getDay();
   return day === 0 ? 6 : day - 1;
 }
@@ -97,6 +125,7 @@ export function DatePicker({ value, onChange }) {
   const { y, m, d } = parseDate(value);
   const [viewY, setViewY] = useState(y);
   const [viewM, setViewM] = useState(m);
+  const pos = useDropdownPos(ref, open, DATE_W, DATE_H);
 
   useEffect(() => {
     if (!open) return;
@@ -127,7 +156,11 @@ export function DatePicker({ value, onChange }) {
         {value}
       </button>
       {open && (
-        <div className="picker-dropdown date-dropdown">
+        <div
+          className="picker-dropdown date-dropdown"
+          style={{ top: pos.top ?? "auto", bottom: pos.bottom ?? "auto", left: pos.left }}
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="date-nav">
             <button className="date-nav-btn" onClick={prevMonth}>‹</button>
             <span className="date-nav-label">{MONTHS[viewM - 1]} {viewY}</span>

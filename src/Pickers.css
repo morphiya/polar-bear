@@ -24,8 +24,6 @@
 
 .picker-dropdown {
   position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
   z-index: 200;
   background: #1a1a28;
   border: 1px solid #2a2a3a;
